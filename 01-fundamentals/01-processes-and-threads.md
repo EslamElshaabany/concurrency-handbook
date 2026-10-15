@@ -40,7 +40,25 @@ Consider two copies of a backend service. They may execute identical code, but a
 
 A request, by contrast, is a unit of application work. There is no universal rule that one request creates one thread or one process. The execution model determines how requests use those resources.
 
-### 2. A process provides a memory boundary
+### 2. What belongs to the process, and what belongs to a thread?
+
+Think of a process as a **resource and execution container**. Here, “container” is a teaching analogy, not a claim that a process is a Docker container or a complete security sandbox.
+
+A typical native-process memory layout includes:
+
+| Region or resource | Purpose | Important qualification |
+| --- | --- | --- |
+| Code, often called text | Executable instructions | Read-only code pages may be shared physically between processes. |
+| Data | Global and static storage | Ordinary mutable data is private to the process unless explicitly shared. |
+| Heap | Dynamically allocated storage | Threads in the process can refer to the same allocations. |
+| Stacks | Function calls and local execution data | A multithreaded process has separate thread stacks, not one stack used by every thread. |
+| Open files and other handles | Access to OS-managed resources | Exact sharing and inheritance rules depend on the OS and resource. |
+
+The **execution context** is the state needed to resume an execution flow, including its program counter (PC) and registers. A single-threaded process has one such flow. In a multithreaded process, each thread needs its own context.
+
+Textbooks often call the OS's process bookkeeping a **Process Control Block (PCB)** and per-thread bookkeeping a **Thread Control Block (TCB)**. These are conceptual names, not portable APIs or a requirement that every OS stores everything in exactly two structures. Process identity and resources belong to the process model; resumable execution state belongs to each thread. Scheduling metadata is associated with the schedulable entity in that OS.
+
+### 3. A process provides a memory boundary
 
 Each process normally has its own virtual address space. Processes can deliberately communicate through mechanisms such as pipes, sockets, or shared-memory mappings. Isolation of ordinary memory does not mean they cannot affect the same database row, file, or external service.
 
@@ -48,7 +66,7 @@ A useful Linux example is `fork()`: parent and child have separate memory spaces
 
 For now, distinguish **private memory** from **shared external resources**. Two service processes can each have a private cache and still compete for the same database connection limit.
 
-### 3. Threads share the process, but have separate execution state
+### 4. Threads share the process, but have separate execution state
 
 In the POSIX thread model, threads in a process share global/heap memory and process-wide resources such as open file descriptors. Each has its own stack and thread-specific state. See [`pthreads(7)`](https://man7.org/linux/man-pages/man7/pthreads.7.html).
 
@@ -64,7 +82,7 @@ A separate stack does not make every object accessed through it private. Two loc
 
 The design question is ownership: **which execution contexts can access this state, and what coordinates their access?** Do not infer ownership merely from where a variable is declared.
 
-### 4. Runnable, running, and waiting are different
+### 5. Runnable, running, and waiting are different
 
 For the simplified OS-thread model used here:
 
@@ -73,13 +91,15 @@ For the simplified OS-thread model used here:
 - **Waiting/blocked:** cannot proceed until an event, such as I/O completion or lock availability.
 - **Terminated:** execution has ended.
 
+The familiar textbook process lifecycle, new → ready → running → waiting → ready → … → terminated, is a simplified starting point for a single execution flow. In a multithreaded process, one thread may be running while another waits; one process-wide label cannot capture every thread's state.
+
 These are teaching labels, not an exact enumeration of every OS state. Linux's scheduler selects runnable threads according to policy and priorities; see [`sched(7)`](https://man7.org/linux/man-pages/man7/sched.7.html). A context switch changes the execution context using a CPU. A switch does not create more CPU capacity.
 
 On one available logical CPU, two OS threads can take turns. On multiple available logical CPUs, eligible threads may execute simultaneously. Neither creating threads nor declaring work independent guarantees a particular schedule. Available CPU capacity may also be constrained by affinity, quotas, and competing workloads.
 
 This gives us a preview of two core concepts: **concurrency** concerns overlapping progress; **parallelism** concerns simultaneous execution. Both processes and threads can participate in either, depending on the environment.
 
-### 5. A thread can wait without the entire process waiting
+### 6. A thread can wait without the entire process waiting
 
 If one OS thread blocks while another is runnable, the second may execute. But if the second needs a lock held by the first, it may have to wait too. More threads do not automatically remove dependencies.
 
@@ -87,7 +107,20 @@ An OS thread can end while other threads continue. In POSIX, a new thread's star
 
 Shared resources also mean shared failure impact. An uncaught application exception may be contained by a runtime, but a process-fatal error can terminate all its threads. Threads are not strong fault-isolation boundaries.
 
-### 6. Runtime tasks are another layer
+### 7. Cooperation between processes and the motivation for threads
+
+**Interprocess communication (IPC)** lets processes exchange information or coordinate work. Two broad approaches are:
+
+- **Message passing:** transfer information through a mechanism such as a pipe or socket. Applications still need rules for message framing, ownership, ordering, and failure handling.
+- **Shared memory:** deliberately map memory so multiple processes can access it. Sharing the bytes does not make compound updates atomic or remove the need for synchronization.
+
+**Producer–consumer** describes a cooperation pattern, not a third IPC mechanism. A producer supplies work or data and a consumer handles it. The pattern can use messages or a shared-memory buffer; it can also occur between threads in one process.
+
+For example, two service processes can exchange booking IDs over a local socket. Alternatively, threads within one service can access the same in-memory work queue. Either design needs a policy for an empty queue, a full queue, and shutdown. The appropriate mechanism depends on the ownership and isolation required.
+
+Threads are useful because they can keep independent work responsive while another activity waits, share process resources directly, and make parallel execution possible when CPU capacity and the workload permit it. Creating and coordinating threads often costs less than doing the equivalent with separate processes, but the cost depends on the OS, runtime, and workload. Shared memory introduces coordination costs of its own. “Cheaper” is a tradeoff to measure, not a guarantee of faster execution.
+
+### 8. Runtime tasks are another layer
 
 This lesson uses **OS thread** explicitly. A language runtime can schedule many application activities over fewer OS threads. Do not transfer the OS-thread state diagram unchanged to every runtime abstraction.
 
@@ -99,6 +132,22 @@ This lesson uses **OS thread** explicitly. A language runtime can schedule many 
 | JavaScript | Async functions do not by themselves establish parallel JavaScript execution; Node.js also provides explicit worker threads. See [worker threads](https://nodejs.org/api/worker_threads.html). |
 
 These are signposts for later language mappings. First learn to ask: **is this an OS thread, or work a runtime schedules onto one?**
+
+### 9. User-level execution and kernel scheduling
+
+The OS schedules kernel-visible execution contexts. A user-space runtime or library may schedule additional execution flows over those contexts. The word “thread” is used at both layers, so always identify the layer.
+
+In the following textbook notation, **M** is the number of user-level execution flows and **N** is the number of underlying kernel-scheduled threads:
+
+| Mapping | Meaning | Parallelism and blocking |
+| --- | --- | --- |
+| M:1 | Many user-level flows use one kernel thread. | Those flows cannot execute CPU instructions in parallel with one another. A call that blocks the only underlying kernel thread prevents all of them from executing until that thread can run again. Runtime-aware nonblocking I/O may suspend just one user-level flow instead. |
+| 1:1 | Each user thread maps to one kernel thread. | Multiple runnable threads can execute in parallel if CPU capacity is available. A blocked thread need not stop the others. Neither parallel execution nor a speedup is guaranteed. |
+| M:N | Many user-level flows are multiplexed over multiple kernel threads. | Runtime scheduling and OS scheduling both matter. Parallelism depends on runnable work and available underlying threads/CPUs; blocking behavior depends on how the runtime handles the operation. |
+
+Go goroutines illustrate runtime multiplexing, as described in the [Go FAQ](https://go.dev/doc/faq#goroutines). Java virtual threads also distinguish runtime scheduling from carrier-thread execution. These are useful connections to the M:N idea, not a claim that their schedulers, preemption, or blocking rules are identical.
+
+Keep the boundaries visible: a process owns resources, an OS thread supplies an execution context the OS can schedule, and a runtime may add its own schedulable activities. The next chapter examines CPU scheduling; the later execution-model chapter develops these mappings in depth.
 
 ## Visual Model
 
@@ -224,9 +273,9 @@ A snapshot cannot prove two threads executed simultaneously, show every brief st
 
 ### Conceptual Questions
 
-1. A service starts a second process. Both allocate a private variable called `cache`. Does changing one cache automatically change the other? What if both write the same database row?
+1. A service starts a second process. Both allocate a private variable called `cache`. Does changing one cache automatically change the other? What if both write the same database row? If they deliberately share a memory region, is synchronization still necessary? Is producer–consumer itself an IPC mechanism?
 2. Threads A and B each have a local reference to the same booking object. Which parts are separate, and which are shared?
-3. There are 100 runnable OS threads and one available logical CPU. Does that imply 100-way parallel execution? Can the threads still make concurrent progress?
+3. There are 100 runnable OS threads and one available logical CPU. Does that imply 100-way parallel execution? Can the threads still make concurrent progress? How would the answer change for M user-level flows mapped to one kernel thread, and what happens if a call blocks that underlying thread?
 4. Thread A waits for I/O while holding a lock that B needs. Why might B fail to progress even if a CPU is available?
 
 ### Predict the Output
@@ -257,9 +306,9 @@ A snapshot cannot prove two threads executed simultaneously, show every brief st
 <details>
 <summary>Open after attempting the exercises</summary>
 
-1. Ordinary private memory is separate. The same database row is an external shared resource, so the processes can still conflict there. Deliberately shared mappings would change the memory assumption.
+1. Ordinary private memory is separate. The same database row is an external shared resource, so the processes can still conflict there. Deliberately shared mappings would change the memory assumption, but shared bytes still need coordination when accesses conflict. Producer–consumer is a cooperation pattern that can use different IPC mechanisms.
 2. Each thread has its own local reference storage and execution state; both references identify one shared booking object. Safe access depends on ownership, mutability, and coordination.
-3. At most one of those OS threads executes on that one logical CPU at an instant in this model. They can make concurrent progress by taking turns, subject to scheduling and dependencies. Runnable does not mean guaranteed prompt progress.
+3. At most one of those OS threads executes on that one logical CPU at an instant in this model. They can make concurrent progress by taking turns, subject to scheduling and dependencies. Runnable does not mean guaranteed prompt progress. M:1 user-level flows likewise cannot execute CPU instructions in parallel with one another; blocking their sole kernel thread stops their execution until it can run again. Suspending one flow through runtime-aware I/O is a different case.
 4. B needs the lock, not just CPU time. Available CPU capacity cannot satisfy an unmet dependency.
 5. `A B M J`, `A M B J`, and `M A B J`. Worker program order puts A before B. The join puts J after worker completion, and M is before the join in the initial thread. A need not precede M; J cannot precede B.
 6. A reads 0, computes and writes 1; then B reads 1, computes and writes 2. B reads after A's write in that particular schedule. Nothing in the pseudocode guarantees that ordering on another run, so observing 2 is not proof of correctness.
