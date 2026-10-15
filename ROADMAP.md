@@ -6,19 +6,19 @@
 
 The four layers are fixed for v1: OS foundations, language-neutral concepts, language mappings, and runnable labs. Learn OS behavior before runtime abstractions. Backend applications and performance are threaded through examples and labs rather than added as competing top-level tracks.
 
-Only the first chapter is complete in this Foundation Pack. Every unchecked entry below is planned. Code-formatted paths describe the intended structure, not existing navigation targets.
+The Foundation Pack is complete, and the first two OS-foundation chapters are available. Every unchecked entry below is planned. Code-formatted paths describe the intended structure, not existing navigation targets.
 
 ## 01-fundamentals
 
 - [x] [01-processes-and-threads.md](01-fundamentals/01-processes-and-threads.md): processes, address spaces, threads, resource sharing, execution state, and observation.
-- [ ] `01-fundamentals/02-cpu-and-scheduling.md`: cores, logical CPUs, runnable versus running, preemption, concurrency versus simultaneous execution.
+- [x] [02-cpu-and-scheduling.md](01-fundamentals/02-cpu-and-scheduling.md): cores, logical CPUs, runnable versus running, preemption, concurrency versus simultaneous execution.
 - [ ] `01-fundamentals/03-memory-and-context-switching.md`: stacks, shared memory, virtual memory, execution context, and switching costs.
 - [ ] `01-fundamentals/04-blocking-and-nonblocking-io.md`: waiting, readiness, blocking calls, and why nonblocking is not synonymous with asynchronous.
 - [ ] `01-fundamentals/05-io-multiplexing.md`: readiness notification, event loops, and the relationship between many connections and few executing threads.
 
-## CPU & Scheduling: planned coverage
+## CPU & Scheduling: coverage
 
-The OS-course notes expand the existing `01-fundamentals/02-cpu-and-scheduling.md` lesson; they do not add a new architectural layer.
+The completed [CPU & Scheduling lesson](01-fundamentals/02-cpu-and-scheduling.md) develops the OS-course notes within the existing architecture. Its coverage includes:
 
 - **Selection and dispatch:** short-term scheduling chooses eligible execution work; dispatch gives it CPU time. Use “process” for a single-threaded teaching model and identify threads as the schedulable execution contexts where applicable. A ready queue is a conceptual model; real systems may use multiple per-CPU or policy-specific structures.
 - **Criteria:** CPU utilization and throughput; turnaround from arrival to completion; waiting time spent ready but not running; response time from arrival to first service in the scheduling model. Distinguish that last metric from a backend request's end-to-end response latency.
