@@ -12,7 +12,7 @@
 
 By the end of this lesson, you can:
 
-- Distinguish a program, a process, an OS thread, and an application task.
+- Distinguish a program, a process, a hardware thread/logical CPU, an OS thread, and a runtime task.
 - Draw the resource boundary of a process and identify what its threads share.
 - Explain why multiple threads do not guarantee parallel execution.
 - Trace simple schedules without assuming an execution order that was never guaranteed.
@@ -31,6 +31,73 @@ Where can that second request execute? Can it use the same memory? Does starting
 Before choosing virtual threads, goroutines, futures, or an event loop, we need to name the resources and execution contexts involved. This chapter establishes those names. It does not yet choose a server architecture.
 
 ## How It Works
+
+### Hardware threads and software threads
+
+**Hardware threads describe where software can execute. Software threads describe the execution flows the software wants to run.** The shared word does not make them the same object.
+
+| Term | What it is | What its count means |
+| --- | --- | --- |
+| Physical CPU core | Hardware containing instruction-execution resources | Physical cores in the processor |
+| Hardware thread / logical CPU | A hardware execution context exposed to the OS | Contexts onto which the OS can schedule execution |
+| OS thread | A software execution flow with saved state, a stack, and OS bookkeeping | Software flows that exist, including running, ready, and blocked threads |
+| Runtime task or runtime-managed thread | Work scheduled by a language runtime onto underlying OS threads | Activities managed by that runtime; not necessarily OS threads |
+
+In CPU specifications such as **“4 cores, 8 threads,”** the second number means hardware threads. In **“this process has 100 threads,”** it normally means software OS threads. “Software thread” is a broad phrase: a virtual thread is also a software abstraction, so use **OS thread** or **runtime-managed thread/task** when that distinction matters.
+
+#### What SMT adds
+
+Without hardware multithreading, a core commonly exposes one hardware execution context. With **simultaneous multithreading (SMT)**, a core can expose multiple contexts. **Intel Hyper-Threading** is one SMT implementation. It exposes two logical processors per supported physical core when enabled; that is not a rule for every processor design.
+
+Each hardware context maintains architectural state, including register state. The sibling contexts share substantial core execution resources. Instructions from their assigned software threads can make progress simultaneously on those shared resources. SMT is more than the OS rapidly switching between two software threads, but two hardware threads are not two complete physical cores and do not guarantee twice the throughput.
+
+See Intel's [Hyper-Threading explanation](https://www.intel.com/content/www/us/en/gaming/resources/hyper-threading.html) and [architecture discussion](https://www.intel.com/content/www/us/en/developer/articles/guide/hyper-thread-tuning-guide-for-video-ai-workload.html). Linux's [x86 topology documentation](https://www.kernel.org/doc/html/v6.19-rc6/arch/x86/topology.html) likewise uses “thread” for a logical CPU in its hardware-topology discussion.
+
+#### What the OS does with software threads
+
+The OS scheduler selects a runnable OS thread for an available logical CPU. During a software context switch, the outgoing thread's resumable state is saved and the incoming thread's state is restored. One hardware context can therefore execute many different software threads over time. An OS thread may also resume on a different eligible logical CPU.
+
+Both layers have register state, which can make definitions sound similar. The difference is between a hardware context available to execute instructions and a software execution flow whose saved state can be loaded into such a context. A software stack is memory associated with that flow, not a dedicated physical CPU core.
+
+Microsoft's [CPU analysis documentation](https://learn.microsoft.com/en-us/windows-hardware/test/wpt/cpu-analysis) describes OS threads, execution context, time-sharing, and context switching.
+
+#### Example: one physical core, two hardware threads, three OS threads
+
+Assume SMT is enabled and OS threads A, B, and C are all runnable. Both logical CPUs are available to them.
+
+| Moment | Logical CPU 0 | Logical CPU 1 | Other ready work |
+| --- | --- | --- | --- |
+| One possible placement | OS thread A | OS thread B | OS thread C |
+| A later possible placement | OS thread C | OS thread B | OS thread A |
+
+The core has **two hardware contexts throughout**. Scheduling C does not create a third one. Nor does C stop existing while it waits for a turn.
+
+```mermaid
+flowchart TD
+    A["OS thread A"] --> Scheduler["OS scheduler"]
+    B["OS thread B"] --> Scheduler
+    C["OS thread C"] --> Scheduler
+    subgraph Core["One physical core with two-way SMT"]
+        H0["Hardware thread 0 / logical CPU 0"] --> Units["Shared core execution resources"]
+        H1["Hardware thread 1 / logical CPU 1"] --> Units
+    end
+    Scheduler --> H0
+    Scheduler --> H1
+```
+
+The scheduler arrows represent placement choices over time, not a permanent binding. The shared-resource arrows show why two logical CPUs in one core are different from two independent physical cores.
+
+Now scale the same idea to **4 physical cores, each exposing 2 hardware threads, with all 8 logical CPUs online and available**. If an application has 100 runnable OS threads, at most 8 of those OS threads can be the currently executing contexts at once in this simplified model. The rest wait for CPU service. The OS can rotate the selected threads, and sibling hardware contexts share resources. Other workloads, affinity, or CPU budgets can reduce the service the application actually receives.
+
+That limit concerns **CPU execution**, not the number of requests or database queries in progress. Work waiting on I/O can remain in flight without currently executing instructions.
+
+#### A rule for reading the rest of this handbook
+
+- In a CPU specification, read “threads” as **hardware execution contexts**.
+- In an OS-thread count, read “threads” as **software flows managed by the OS**.
+- In a runtime API, identify whether the object is an OS thread or a runtime-managed activity.
+
+An application can use many software threads even on one core without SMT; they take turns. Creating software threads does not increase the CPU's hardware-thread count. Enabling SMT does not create worker threads inside your application.
 
 ### 1. A program is not a process
 
@@ -137,7 +204,7 @@ These are signposts for later language mappings. First learn to ask: **is this a
 
 The OS schedules kernel-visible execution contexts. A user-space runtime or library may schedule additional execution flows over those contexts. The word “thread” is used at both layers, so always identify the layer.
 
-In the following textbook notation, **M** is the number of user-level execution flows and **N** is the number of underlying kernel-scheduled threads:
+In the following textbook notation, **M** is the number of user-level execution flows and **N** is the number of underlying kernel-scheduled threads. **Both M and N are software-layer counts; N does not mean hardware threads or physical cores.**
 
 | Mapping | Meaning | Parallelism and blocking |
 | --- | --- | --- |
@@ -262,6 +329,8 @@ A snapshot cannot prove two threads executed simultaneously, show every brief st
 | --- | --- |
 | A program and a process are the same thing. | One program can have multiple running instances, each with its own process resources. |
 | Every request gets its own thread. | That is one possible execution model, not an OS rule. |
+| A CPU's advertised thread count is the number of software threads I can create. | It counts hardware execution contexts; software-thread counts are separate. |
+| Hyper-Threading and application multithreading are the same mechanism. | SMT is a hardware capability; application multithreading creates/manages software execution flows. |
 | Every thread gets a CPU core. | Runnable threads compete for available CPU execution capacity. |
 | More threads always make work faster. | Dependencies, contention, scheduling overhead, and resource limits can dominate. |
 | A local variable makes the referenced object thread-private. | Local references on separate stacks can point to one shared object. |
@@ -301,6 +370,8 @@ A snapshot cannot prove two threads executed simultaneously, show every brief st
 8. Use the read-only system-wide snapshot to find a process with multiple threads, if one is visible. Explain why its thread count alone cannot reveal CPU parallelism or request concurrency. If none is visible, explain why the snapshot does not establish that all programs are single-threaded.
 9. Draw a backend with two worker threads sharing an in-memory cache and a second service process with its own cache. Add a database both processes use. Mark every resource that can be accessed from more than one execution context.
 
+10. A machine has 4 cores with 2 hardware threads per core, all online. Your process has 100 runnable OS threads. With no other work or placement/budget restrictions, how many can currently execute at once? Does starting another 100 OS threads change the CPU topology? What changes if SMT is disabled?
+
 ### Answer Guidance
 
 <details>
@@ -316,10 +387,15 @@ A snapshot cannot prove two threads executed simultaneously, show every brief st
 8. Multiple rows demonstrate multiple OS threads associated with one visible process. They do not show simultaneous execution, runnable work, or runtime task counts. A snapshot has limited visibility and captures only one moment.
 9. The first cache is shared between its two workers. The second cache is separate ordinary process memory. The database is shared externally across both processes. Mark separate thread execution state inside each process and label any explicit communication you introduce.
 
+10. At most 8 OS threads can be the currently executing contexts at once under those assumptions. Additional software threads do not create hardware contexts. Disabling SMT leaves 4 online execution contexts in this example; software multithreading can still work by taking turns. Neither configuration guarantees a particular throughput or caps waiting I/O at that number.
+
 </details>
 
 ## References
 
+- [Intel: What Is Hyper-Threading?](https://www.intel.com/content/www/us/en/gaming/resources/hyper-threading.html) and [Hyper-Thread architecture discussion](https://www.intel.com/content/www/us/en/developer/articles/guide/hyper-thread-tuning-guide-for-video-ai-workload.html): logical execution contexts and shared physical-core resources.
+- [Linux kernel: x86 topology](https://www.kernel.org/doc/html/v6.19-rc6/arch/x86/topology.html): hardware threads as logical CPUs; this terminology is specific to the topology discussion.
+- [Microsoft Learn: CPU Analysis](https://learn.microsoft.com/en-us/windows-hardware/test/wpt/cpu-analysis): software-thread context, scheduling, and time-sharing.
 - [Microsoft Learn: About Processes and Threads](https://learn.microsoft.com/en-us/windows/win32/procthread/about-processes-and-threads): program/process/thread distinction and Windows resources.
 - [Linux man-pages: pthreads(7)](https://man7.org/linux/man-pages/man7/pthreads.7.html): shared process attributes and per-thread state in POSIX.
 - [Linux man-pages: fork(2)](https://man7.org/linux/man-pages/man2/fork.2.html): separate address spaces, inheritance, and Linux copy-on-write behavior.
