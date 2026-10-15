@@ -34,11 +34,12 @@ A successful lesson leaves you able to explain a mechanism, draw its execution m
 
 ## Current status
 
-This Foundation Pack contains the repository overview, complete curriculum, concept map, first complete chapter, and reusable templates. Later chapters, language mappings, and runnable labs are **planned**, not implemented. Their paths appear as plain code in the roadmap so navigation never promises missing files.
+The Foundation Pack establishes the repository overview, complete curriculum, concept map, and reusable templates. The first two OS-foundation chapters, Processes & Threads and CPU & Scheduling, are complete. Remaining chapters, language mappings, and runnable labs are **planned**, not implemented. Their paths appear as plain code in the roadmap so navigation never promises missing files.
 
 Available now:
 
 - [Processes & Threads](01-fundamentals/01-processes-and-threads.md)
+- [CPU & Scheduling](01-fundamentals/02-cpu-and-scheduling.md)
 - [Roadmap and scope](ROADMAP.md)
 - [Concept map](CONCEPT-MAP.md)
 - [Chapter template](templates/chapter-template.md)
