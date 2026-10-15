@@ -16,6 +16,22 @@ Only the first chapter is complete in this Foundation Pack. Every unchecked entr
 - [ ] `01-fundamentals/04-blocking-and-nonblocking-io.md`: waiting, readiness, blocking calls, and why nonblocking is not synonymous with asynchronous.
 - [ ] `01-fundamentals/05-io-multiplexing.md`: readiness notification, event loops, and the relationship between many connections and few executing threads.
 
+## CPU & Scheduling: planned coverage
+
+The OS-course notes expand the existing `01-fundamentals/02-cpu-and-scheduling.md` lesson; they do not add a new architectural layer.
+
+- **Selection and dispatch:** short-term scheduling chooses eligible execution work; dispatch gives it CPU time. Use “process” for a single-threaded teaching model and identify threads as the schedulable execution contexts where applicable. A ready queue is a conceptual model; real systems may use multiple per-CPU or policy-specific structures.
+- **Criteria:** CPU utilization and throughput; turnaround from arrival to completion; waiting time spent ready but not running; response time from arrival to first service in the scheduling model. Distinguish that last metric from a backend request's end-to-end response latency.
+- **FCFS:** arrival order, nonpreemptive behavior, and the convoy effect.
+- **SJF / SRTF:** shortest next CPU burst versus shortest remaining burst; explain their idealized average-waiting benefits under explicit assumptions and why future burst lengths need estimation. Do not describe them as universally optimal schedulers.
+- **Priority:** preemptive/nonpreemptive variants, starvation, and aging as a mitigation whose effectiveness depends on policy.
+- **Round Robin:** time quantum, responsiveness, and context-switch overhead.
+- **Multilevel queue:** classification into queues and the policy for scheduling across them.
+- **Multilevel feedback queue (MLFQ):** movement between queues using observed behavior; explain boosts and starvation tradeoffs. Present it as one influential design, not “the most realistic” or the universal scheduler of modern OSes.
+- **Multiprocessor scheduling:** load balancing, CPU affinity and migration tradeoffs, shared versus per-CPU queues, and symmetric (SMP) versus asymmetric (AMP) processor roles. Avoid reducing either term to a single load-balancing algorithm.
+
+Use small timelines and compare policies on the same declared workload before introducing implementation-specific details. Scheduling asks who gets CPU time; the following memory chapter asks how addresses, memory ownership, and saved execution context relate.
+
 ## 02-core-concepts
 
 - [ ] `02-core-concepts/01-concurrency-vs-parallelism.md`: overlapping progress, simultaneous execution, CPU-bound and I/O-bound workloads.
