@@ -4,6 +4,14 @@
 
 This map is the learning model for the handbook. It separates OS resources, runtime scheduling, programming interfaces, and observable behavior. It is not a claim that all runtimes use the same implementation.
 
+## Hardware threads versus software threads
+
+A CPU specification's thread count describes **hardware execution contexts**, usually exposed as logical CPUs. A process's OS-thread count describes **software execution flows** that the OS schedules onto those contexts. Runtime-managed threads/tasks add another software layer.
+
+For example, 4 cores with 2 hardware threads per core provide 8 logical CPUs when all are enabled and online. A process can still have 100 OS threads; that does not create 100 hardware contexts. Runnable threads can take turns, while waiting tasks need no current CPU execution. SMT siblings share physical-core resources, so 8 logical CPUs do not imply 8 full physical cores' throughput.
+
+See [Hardware threads and software threads](01-fundamentals/01-processes-and-threads.md#hardware-threads-and-software-threads) for the terminology, placement diagram, examples, exercises, and primary references. Throughout this map, **OS thread** means a software thread and **logical CPU** means a hardware execution context on the bare-metal system being modeled.
+
 ## From application work to CPU execution
 
 ```mermaid
@@ -25,7 +33,8 @@ A task might be a request, callback, goroutine, or virtual thread. It is not nec
 | Concept | Question it answers | Does not establish by itself |
 | --- | --- | --- |
 | Process | Which execution environment and resource/address-space boundary contains the work? | One process equals one thread |
-| OS thread | Which schedulable execution context runs instructions? | A dedicated CPU or private heap |
+| Hardware thread / logical CPU | Which hardware execution context can receive scheduled work? | A full independent physical core or a cap on software-thread count |
+| OS thread | Which software execution flow is being scheduled? | A dedicated CPU or private heap |
 | Multithreading | Does a process have multiple threads of execution? | Simultaneous execution |
 | Concurrency | Can multiple activities make progress over an overlapping period? | Multiple CPUs executing those activities at once |
 | Parallelism | Are activities executing simultaneously? | That the application is faster |
