@@ -147,7 +147,7 @@ In the following textbook notation, **M** is the number of user-level execution 
 
 Go goroutines illustrate runtime multiplexing, as described in the [Go FAQ](https://go.dev/doc/faq#goroutines). Java virtual threads also distinguish runtime scheduling from carrier-thread execution. These are useful connections to the M:N idea, not a claim that their schedulers, preemption, or blocking rules are identical.
 
-Keep the boundaries visible: a process owns resources, an OS thread supplies an execution context the OS can schedule, and a runtime may add its own schedulable activities. The next chapter examines CPU scheduling; the later execution-model chapter develops these mappings in depth.
+Keep the boundaries visible: a process owns resources, an OS thread supplies an execution context the OS can schedule, and a runtime may add its own schedulable activities. The [next chapter](02-cpu-and-scheduling.md) examines CPU scheduling; the later execution-model chapter develops these mappings in depth.
 
 ## Visual Model
 
@@ -328,4 +328,4 @@ A snapshot cannot prove two threads executed simultaneously, show every brief st
 - [procps-ng: ps(1)](https://man7.org/linux/man-pages/man1/ps.1.html): Linux observation options and fields.
 - [Oracle: Java 21 Virtual Threads](https://docs.oracle.com/en/java/javase/21/core/virtual-threads.html), [Go FAQ: goroutines](https://go.dev/doc/faq#goroutines), [Scala: Futures and Promises](https://docs.scala-lang.org/overviews/core/futures.html), and [Node.js: worker threads](https://nodejs.org/api/worker_threads.html): runtime distinctions previewed above. Runtime details belong in the language mappings.
 
-Next in the [roadmap](../ROADMAP.md): CPU & Scheduling. We will examine how runnable work gets CPU time before comparing concurrency and parallelism in depth.
+Next: [CPU & Scheduling](02-cpu-and-scheduling.md). Examine how runnable work gets CPU time before comparing concurrency and parallelism in depth.
